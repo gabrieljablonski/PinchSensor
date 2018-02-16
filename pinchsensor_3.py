@@ -3,7 +3,6 @@ import pyqtgraph as pg
 import time
 import datetime
 import serial
-import numpy as np
 import threading
 import os
 import configparser
@@ -24,9 +23,10 @@ def update_config_file(def_time=default_time, def_ymin=default_ymin, def_ymax=de
                     'default_ymax': str(def_ymax),
                     'default_port': str(def_port),
                     'default_baudrate': str(def_baudrate)}
+    if os.path.exists('ps_config.ini'):
+        ui.message_box("default", '')
     with open('ps_config.ini', 'w') as configfile:
         c.write(configfile)
-    ui.message_box("default", '')
 
 
 config = configparser.ConfigParser()
@@ -345,20 +345,21 @@ class Ui_pinchSensorUI(object):
         self.comAutoConfigWindow = QtGui.QDialog()
         self.comAutoConfigWindow.setWindowTitle("COM automatic configuration")
         self.comAutoConfigWindow.setWindowFlags(QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowCloseButtonHint)
-        self.comAutoConfigWindow.setFixedSize(500, 300)
+        self.comAutoConfigWindow.setFixedSize(400, 275)
 
         self.buttonCancelAuto = QtWidgets.QPushButton(self.comAutoConfigWindow)
         self.buttonCancelAuto.setText("Cancel")
-        self.buttonCancelAuto.setGeometry(QtCore.QRect(400, 240, 75, 23))
+        self.buttonCancelAuto.setGeometry(QtCore.QRect(310, 240, 75, 23))
         self.buttonCancelAuto.clicked.connect(self.com_auto_close)
 
         self.auto_config_state = 0
         self.buttonAuto = QtWidgets.QPushButton(self.comAutoConfigWindow)
         self.buttonAuto.setText("Start")
-        self.buttonAuto.setGeometry(QtCore.QRect(300, 240, 75, 23))
+        self.buttonAuto.setGeometry(QtCore.QRect(230, 240, 75, 23))
         self.buttonAuto.clicked.connect(self.auto_config)
 
         self.textAutoConfig = QtWidgets.QTextEdit(self.comAutoConfigWindow)
+        self.textAutoConfig.setGeometry(QtCore.QRect(10, 10, 380, 220))
         self.textAutoConfig.setReadOnly(True)
         self.textAutoConfig.setFrameStyle(1)
         self.textAutoConfig.setText("Make sure the device is disconnected and press \"Start\".\n")
@@ -432,13 +433,17 @@ class Ui_pinchSensorUI(object):
 
         self.optionsMenu = self.menuBar.addMenu('&Options')
         self.optionCOMConnect = self.optionsMenu.addMenu('&Configure COM port')
-        self.actionCOMConfigAuto = self.optionCOMConnect.addAction("&Automatic")
+        self.actionCOMConfigAuto = self.optionCOMConnect.addAction('&Automatic')
         self.actionCOMConfigAuto.triggered.connect(self.com_config_auto)
-        self.actionCOMConfigManual = self.optionCOMConnect.addAction("&Manual")
+        self.actionCOMConfigManual = self.optionCOMConnect.addAction('&Manual')
         self.actionCOMConfigManual.triggered.connect(self.com_config_manual)
-        self.actionCOMReset = self.optionsMenu.addAction("&Disconnect COM port")
+        self.actionCOMReset = self.optionsMenu.addAction('&Disconnect COM port')
         self.actionCOMReset.triggered.connect(self.disconnect)
         self.actionCOMReset.setDisabled(True)
+
+        self.dataAnalysisMenu = self.menuBar.addMenu('&Data Analysis')
+        self.actionOpenAnalysis = self.dataAnalysisMenu.addAction('&Open Data Analysis window')
+        self.actionOpenAnalysis.triggered.connect(self.open_data_analysis)
 
         self.retranslateUi(pinchSensorUI)
         QtCore.QMetaObject.connectSlotsByName(pinchSensorUI)
@@ -454,6 +459,9 @@ class Ui_pinchSensorUI(object):
         self.labelAdjustYAxis.setText(_translate("pinchSensorUI", "Adjust axes"))
         self.labelCurrentSession.setText(_translate("pinchSensorUI", "Current Session:"))
         # self.lineFileName.setText(_translate("pinchSensorUI", "current_session.txt"))
+
+    def open_data_analysis(self):
+        return
 
     def message_box(self, message, ex=None):
         if message == "disconnected":
@@ -554,13 +562,8 @@ class Ui_pinchSensorUI(object):
         self.update_auto_signal.signal.emit()
 
     def update_auto(self):
-        if available_ports == -1:
-            self.auto_config_state = -1
-            self.textAutoConfig.append("\nNo ports found. Please, try again or setup device manually.\n")
-            self.buttonAuto.setEnabled(True)
-            self.buttonAuto.setText("Restart")
-            self.update_auto_timer.stop()
-        elif available_ports and self.auto_config_state != 4:
+        global default_port
+        if available_ports and self.auto_config_state != 4:
             self.update_auto_timer.stop()
             if self.auto_config_state == 1:
                 self.available_ports = available_ports
@@ -569,11 +572,22 @@ class Ui_pinchSensorUI(object):
                 self.buttonAuto.setEnabled(True)
                 self.auto_config_state = 2
             elif self.auto_config_state == 3:
-                if len(available_ports) > len(self.available_ports):
+                if available_ports == -1:
+                    self.auto_config_state = -1
+                    self.textAutoConfig.append("\nNo ports found. Please, try again or setup device manually.\n")
+                    self.buttonAuto.setEnabled(True)
+                    self.buttonAuto.setText("Restart")
+                    self.update_auto_timer.stop()
+                elif self.available_ports == -1:
+                    default_port = available_ports[0]
+                    self.textAutoConfig.append("\nDevice found on port %s.\nEstablishing connection..." % default_port)
+                    self.auto_config_state = 4
+                    threading.Thread(target=check_baudrate).start()
+                    self.update_auto_timer.start(1000)
+                elif len(available_ports) > len(self.available_ports):
                     for port in available_ports:
                         if port not in self.available_ports:
                             self.textAutoConfig.append("\nDevice found on port %s.\nEstablishing connection..." % port)
-                            global default_port
                             default_port = port
                             self.auto_config_state = 4
                             threading.Thread(target=check_baudrate).start()
@@ -600,9 +614,9 @@ class Ui_pinchSensorUI(object):
                 self.buttonAuto.setText("Restart")
                 self.auto_config_state = -1
             elif default_baudrate:
-                self.textAutoConfig.append("\nDevice found. \nPort: %s\nBaudrate: %s\n"
-                                           "Press \"Confirm\" to finish connection.\n" %
-                                           (default_port, default_baudrate))
+                self.textAutoConfig.append("\nDevice found.\n" + '-'*50 + "\nPort: %s\nBaudrate: %s\n" %
+                                           (default_port, default_baudrate) + '-'*50 +
+                                           "\nPress \"Confirm\" to finish connection.\n")
                 self.buttonAuto.setText("Confirm")
                 self.buttonAuto.setEnabled(True)
                 self.auto_config_state = 5
@@ -622,17 +636,18 @@ class Ui_pinchSensorUI(object):
     def refresh_manual(self):
         com_ports()
         self.comboCOM.clear()
-        if available_ports:
+        if available_ports and available_ports != -1:
             self.buttonConfirm.setEnabled(True)
             self.comboCOM.setEnabled(True)
             self.buttonRefresh.setEnabled(True)
             for port in available_ports:
                 self.comboCOM.addItem(port)
                 self.comboCOM.setCurrentText(port)
-        else:
+        elif available_ports == -1:
             self.comboCOM.addItem("Ports not found")
             self.comboCOM.setDisabled(True)
             self.buttonConfirm.setDisabled(True)
+            self.buttonRefresh.setEnabled(True)
 
     def set_com(self):
         ser.baudrate = int(self.comboBaud.currentText())
@@ -997,3 +1012,5 @@ if __name__ == "__main__":
     ui = Ui_pinchSensorUI()
     pinchSensorUI.show()
     sys.exit(app.exec_())
+
+# TODO bootup loading screen
