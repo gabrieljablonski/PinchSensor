@@ -3,9 +3,11 @@ import pyqtgraph as pg
 import time
 import datetime
 import serial
+import serial.tools.list_ports
 import threading
 import os
 import configparser
+from data_analysis import DataAnalysis
 
 
 default_time = 5                  # 3 <= default_time <= 20
@@ -91,21 +93,39 @@ def write_serial(command):
         ui.message_box("communication_error", '')
 
 
+return_open = False
+
+
 def com_ports():
-    global available_ports
+    global available_ports, return_open
     available_ports = []
     result = []
-    ports = ['COM%s' % (i + 1) for i in range(256)]
+    # ports = ['COM%s' % (i + 1) for i in range(256)]
+    ports = [port.device for port in serial.tools.list_ports.comports()]
     for port in ports:
+        return_open = False
+        s = serial.Serial()
         try:
-            s = serial.Serial(port)
-            s.close()
-            result.append(port)
+            s.port = port
+            t = threading.Thread(target=open_port, args=(s,))
+            t.start()
+            t.join(2)
+            if not t.is_alive() and return_open:
+                result.append(port)
         except (OSError, serial.SerialException):
             pass
     available_ports = result
     if not available_ports:
         available_ports = -1
+
+
+def open_port(s):
+    global return_open
+    try:
+        s.open()
+        return_open = True
+    except (OSError, serial.SerialException):
+        pass
 
 
 def check_baudrate():
@@ -450,7 +470,7 @@ class Ui_pinchSensorUI(object):
 
     def retranslateUi(self, pinchSensorUI):
         _translate = QtCore.QCoreApplication.translate
-        pinchSensorUI.setWindowTitle(_translate("pinchSensorUI", "Pinchsensor V3"))
+        pinchSensorUI.setWindowTitle(_translate("pinchSensorUI", "Pinchsensor - Data Acquisition"))
         self.buttonPlot.setText(_translate("pinchSensorUI", "Start Plot"))
         self.buttonSaveCurrent.setText(_translate("pinchSensorUI", "Save Current Session"))
         self.buttonSaveAll.setText(_translate("pinchSensorUI", "Save All Sessions"))
@@ -461,7 +481,7 @@ class Ui_pinchSensorUI(object):
         # self.lineFileName.setText(_translate("pinchSensorUI", "current_session.txt"))
 
     def open_data_analysis(self):
-        return
+        ui2.dataAnalysis.show()
 
     def message_box(self, message, ex=None):
         if message == "disconnected":
@@ -521,6 +541,7 @@ class Ui_pinchSensorUI(object):
 
     def com_config_auto(self):
         self.comAutoConfigWindow.exec_()
+        self.buttonAuto.setEnabled(True)
         self.auto_config()
 
     def com_auto_close(self):
@@ -974,8 +995,13 @@ class MainWindow(QtWidgets.QMainWindow):
             stop_plot = True
             if ser.is_open:
                 ser.close()
-                ser.open()
-                ser.close()
+                try:
+                    ser.open()
+                    ser.close()
+                except (OSError, serial.SerialException):
+                    pass
+
+            ui2.dataAnalysis.close()
             event.accept()
         if choice == QtWidgets.QMessageBox.Save:
             ui.file_save_current()
@@ -1010,6 +1036,9 @@ if __name__ == "__main__":
     app.setStyle('Fusion')
     pinchSensorUI = MainWindow()
     ui = Ui_pinchSensorUI()
+
+    ui2 = DataAnalysis()
+
     pinchSensorUI.show()
     sys.exit(app.exec_())
 
