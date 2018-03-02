@@ -9,10 +9,10 @@
 #define N 175
 
 int value = 0;
-int interval = 5;
-long int current_time = millis() - interval;
+int interval = 5;  // Sample rate: 200 Hz
+long int current_time = micros()/1000. - interval;
 long int start_time;
-long int wait_timer = millis();
+long int wait_timer = micros()/1000.;
 int trigger_input[N] = {0};
 int ref = 0;
 bool online = false;
@@ -53,9 +53,9 @@ void loop()
   
   if(test_available)
   {
-     if(millis() - start_time > current_time + interval)
+     if(micros()/1000. - start_time > current_time + interval)
     {
-      current_time = millis() - start_time;
+      current_time = micros()/1000. - start_time;
       value = analogRead(sensorPin);
       Serial.print(current_time);
       Serial.print(",");
@@ -138,7 +138,7 @@ void loop()
   {
     if(millis() > wait_timer + 500)
     {
-        wait_timer = millis();
+        wait_timer = micros()/1000.;
         Serial.write("w\n");
     }
     testing = false;

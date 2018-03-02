@@ -42,7 +42,8 @@ if os.path.exists('ps_config.ini'):
 else:
     update_config_file(default_time, default_ymin, default_ymax, default_port, default_baudrate)
 
-sample_size = default_time * 164    # 164 samples ~= 1 sec on plot
+sample_frequency = 200   # 200 samples ~= 1 sec on plot
+sample_size = default_time * sample_frequency
 time_buffer = []
 voltage_buffer = []
 trigger_buffer = []
@@ -744,7 +745,7 @@ class Ui_pinchSensorUI(object):
 
     def update_graph(self):
         global sample_size
-        sample_size = 164 * self.spinX.value()
+        sample_size = sample_frequency * self.spinX.value()
         self.spinYUpper.setMinimum(self.spinYLower.value() + 0.5)
         self.spinYLower.setMaximum(self.spinYUpper.value() - 0.5)
         self.graph_widget.plotView.setYRange(self.spinYLower.value(), self.spinYUpper.value())
