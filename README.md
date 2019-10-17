@@ -1,4 +1,4 @@
-# PinchSensor - GUI for data acquisition and live plotting from serial port
+# Pinch Sensor - GUI for data acquisition and live plotting from serial port
 
 This software works along side a device made with an Arduino and an ink-based resistive sensor, capable of measuring bending.
 
